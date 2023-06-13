@@ -31,6 +31,7 @@ import com.google.cloud.bigquery.ExternalTableDefinition;
 import com.google.cloud.bigquery.Field;
 import com.google.cloud.bigquery.FormatOptions;
 import com.google.cloud.bigquery.HivePartitioningOptions;
+import com.google.cloud.bigquery.ParquetOptions;
 import com.google.cloud.bigquery.Schema;
 import com.google.cloud.bigquery.StandardSQLTypeName;
 import com.google.cloud.bigquery.Table;
@@ -100,6 +101,51 @@ public class HoodieBigQuerySyncClient extends HoodieSyncClient {
       LOG.info("Manifest External table created.");
     } catch (BigQueryException e) {
       throw new HoodieBigQuerySyncException("Manifest External table was not created ", e);
+    }
+  }
+
+  public void createOrReplaceTable(String tableName, List<String> sourceUri, String sourceUriPrefix, List<String> partitionFields, boolean exists) {
+    try {
+      ExternalTableDefinition customTable;
+      TableId tableId = TableId.of(projectId, datasetName, tableName);
+
+      ParquetOptions parquetFormatOptions = ParquetOptions.newBuilder().setEnableListInference(true).build();
+
+      if (partitionFields.isEmpty()) {
+        customTable =
+                ExternalTableDefinition.newBuilder(sourceUriPrefix, parquetFormatOptions)
+                        .setSourceUris(sourceUri)
+                        .setAutodetect(true)
+                        .setIgnoreUnknownValues(true)
+                        .setMaxBadRecords(0)
+                        .build();
+      } else {
+        // Configuring partitioning options for partitioned table.
+        HivePartitioningOptions hivePartitioningOptions =
+                HivePartitioningOptions.newBuilder()
+                        .setMode("AUTO")
+                        .setRequirePartitionFilter(false)
+                        .setSourceUriPrefix(sourceUriPrefix)
+                        .build();
+        customTable =
+                ExternalTableDefinition.newBuilder(sourceUriPrefix, parquetFormatOptions)
+                        .setSourceUris(sourceUri)
+                        .setAutodetect(true)
+                        .setHivePartitioningOptions(hivePartitioningOptions)
+                        .setIgnoreUnknownValues(true)
+                        .setMaxBadRecords(0)
+                        .build();
+      }
+
+      if (exists) {
+        bigquery.update(TableInfo.of(tableId, customTable));
+      } else {
+        bigquery.create(TableInfo.of(tableId, customTable));
+      }
+
+      LOG.info("External table created using hivepartitioningoptions");
+    } catch (BigQueryException e) {
+      throw new HoodieBigQuerySyncException("External table was not created ", e);
     }
   }
 

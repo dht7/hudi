@@ -57,6 +57,23 @@ public class ManifestFileWriter {
   }
 
   /**
+   * Fetch all the latest base file names.
+   *
+   * @return List of base file names
+   */
+  public synchronized List<String> getBaseFiles(String sourceUriPrefix) {
+    try {
+      List<String> baseFiles = fetchLatestBaseFilesForAllPartitions(metaClient, useFileListingFromMetadata, assumeDatePartitioning)
+              .map(f -> sourceUriPrefix + f)
+              .collect(Collectors.toList());
+
+      return baseFiles;
+    } catch (Exception e) {
+      throw new HoodieException("Error in writing manifest file.", e);
+    }
+  }
+
+  /**
    * Write all the latest base file names to the manifest file.
    */
   public synchronized void writeManifestFile() {

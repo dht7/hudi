@@ -71,7 +71,7 @@ public class BigQuerySyncTool extends HoodieSyncTool {
     try (HoodieBigQuerySyncClient bqSyncClient = new HoodieBigQuerySyncClient(config)) {
       switch (bqSyncClient.getTableType()) {
         case COPY_ON_WRITE:
-          syncCoWTable(bqSyncClient);
+          syncCoWTableWithoutView(bqSyncClient);
           break;
         case MERGE_ON_READ:
         default:
@@ -80,6 +80,33 @@ public class BigQuerySyncTool extends HoodieSyncTool {
     } catch (Exception e) {
       throw new HoodieBigQuerySyncException("Failed to sync BigQuery for table:" + tableName, e);
     }
+  }
+
+  private void syncCoWTableWithoutView(HoodieBigQuerySyncClient bqSyncClient) {
+    ValidationUtils.checkState(bqSyncClient.getTableType() == HoodieTableType.COPY_ON_WRITE);
+    LOG.info("Sync hoodie table " + snapshotViewName + " at base path " + bqSyncClient.getBasePath());
+
+    if (!bqSyncClient.datasetExists()) {
+      throw new HoodieBigQuerySyncException("Dataset not found: " + config.getString(BIGQUERY_SYNC_DATASET_NAME));
+    }
+
+    ManifestFileWriter manifestFileWriter = ManifestFileWriter.builder()
+            .setConf(config.getHadoopConf())
+            .setBasePath(config.getString(BIGQUERY_SYNC_SYNC_BASE_PATH))
+            .setUseFileListingFromMetadata(config.getBoolean(BIGQUERY_SYNC_USE_FILE_LISTING_FROM_METADATA))
+            .setAssumeDatePartitioning(config.getBoolean(BIGQUERY_SYNC_ASSUME_DATE_PARTITIONING))
+            .build();
+
+    bqSyncClient.createOrReplaceTable(
+            tableName,
+            manifestFileWriter.getBaseFiles(config.getString(BIGQUERY_SYNC_SOURCE_URI_PREFIX)),
+            config.getString(BIGQUERY_SYNC_SOURCE_URI_PREFIX),
+            config.getSplitStrings(BIGQUERY_SYNC_PARTITION_FIELDS),
+            bqSyncClient.tableExists(tableName));
+    LOG.info("External Table creation complete for " + tableName);
+
+    // TODO: Implement automatic schema evolution when you add a new column.
+    LOG.info("Sync table complete for " + snapshotViewName);
   }
 
   private void syncCoWTable(HoodieBigQuerySyncClient bqSyncClient) {
