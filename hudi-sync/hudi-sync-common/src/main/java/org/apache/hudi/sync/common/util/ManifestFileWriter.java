@@ -18,11 +18,13 @@
 
 package org.apache.hudi.sync.common.util;
 
+import org.apache.avro.Schema;
 import org.apache.hudi.common.config.HoodieMetadataConfig;
 import org.apache.hudi.common.engine.HoodieLocalEngineContext;
 import org.apache.hudi.common.fs.FSUtils;
 import org.apache.hudi.common.model.HoodieBaseFile;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
+import org.apache.hudi.common.table.TableSchemaResolver;
 import org.apache.hudi.common.util.ValidationUtils;
 import org.apache.hudi.exception.HoodieException;
 import org.apache.hudi.metadata.HoodieMetadataFileSystemView;
@@ -32,6 +34,7 @@ import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.Path;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
+import org.apache.parquet.schema.MessageType;
 
 import java.io.BufferedWriter;
 import java.io.OutputStreamWriter;
@@ -57,13 +60,39 @@ public class ManifestFileWriter {
   }
 
   /**
+   *
+   * @return Parquet schema of table
+   */
+  public synchronized MessageType getParquetSchema() {
+    try {
+      TableSchemaResolver schemaResolver = new TableSchemaResolver(metaClient);
+      return schemaResolver.getTableParquetSchema();
+    } catch (Exception e) {
+      throw new HoodieException("Error in fetching schema for table.", e);
+    }
+  }
+
+  /**
+   *
+   * @return Avro schema of table
+   */
+  public synchronized Schema getAvroSchema() {
+    try {
+      TableSchemaResolver schemaResolver = new TableSchemaResolver(metaClient);
+      return schemaResolver.getTableAvroSchema();
+    } catch (Exception e) {
+      throw new HoodieException("Error in fetching schema for table.", e);
+    }
+  }
+
+  /**
    * Fetch all the latest base file names.
    *
    * @return List of base file names
    */
   public synchronized List<String> getBaseFiles(String sourceUriPrefix) {
     try {
-      List<String> baseFiles = fetchLatestBaseFilesForAllPartitions(metaClient, useFileListingFromMetadata, assumeDatePartitioning)
+      List<String> baseFiles = fetchLatestBaseFilesByPartitions(metaClient, useFileListingFromMetadata, assumeDatePartitioning)
               .map(f -> sourceUriPrefix + f)
               .collect(Collectors.toList());
 
@@ -96,6 +125,27 @@ public class ManifestFileWriter {
       }
     } catch (Exception e) {
       throw new HoodieException("Error in writing manifest file.", e);
+    }
+  }
+
+  public static Stream<String> fetchLatestBaseFilesByPartitions(HoodieTableMetaClient metaClient,
+                                                                    boolean useFileListingFromMetadata, boolean assumeDatePartitioning) {
+    try {
+      List<String> partitions = FSUtils.getAllPartitionPaths(new HoodieLocalEngineContext(metaClient.getHadoopConf()),
+              metaClient.getBasePath(), useFileListingFromMetadata, assumeDatePartitioning);
+      LOG.info("Retrieve all partitions: " + partitions.size());
+      return partitions.parallelStream().flatMap(p -> {
+        Configuration hadoopConf = metaClient.getHadoopConf();
+        HoodieLocalEngineContext engContext = new HoodieLocalEngineContext(hadoopConf);
+        HoodieMetadataFileSystemView fsView = new HoodieMetadataFileSystemView(engContext, metaClient,
+                metaClient.getActiveTimeline().getCommitsTimeline().filterCompletedInstants(),
+                HoodieMetadataConfig.newBuilder().enable(useFileListingFromMetadata).withAssumeDatePartitioning(assumeDatePartitioning).build());
+
+        String sep = p.isEmpty() ? "" : "/";
+        return fsView.getLatestBaseFiles(p).map(f -> p + sep + f.getFileName());
+      });
+    } catch (Exception e) {
+      throw new HoodieException("Error in fetching latest base files.", e);
     }
   }
 

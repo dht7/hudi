@@ -19,6 +19,7 @@
 
 package org.apache.hudi.gcp.bigquery;
 
+import com.google.cloud.bigquery.Schema;
 import org.apache.hudi.common.model.HoodieTableType;
 import org.apache.hudi.common.util.ValidationUtils;
 import org.apache.hudi.sync.common.HoodieSyncTool;
@@ -30,6 +31,7 @@ import org.apache.log4j.Logger;
 
 import java.util.Properties;
 
+import static org.apache.hudi.gcp.bigquery.AvroToBQSchemaConverter.convert;
 import static org.apache.hudi.gcp.bigquery.BigQuerySyncConfig.BIGQUERY_SYNC_ASSUME_DATE_PARTITIONING;
 import static org.apache.hudi.gcp.bigquery.BigQuerySyncConfig.BIGQUERY_SYNC_DATASET_NAME;
 import static org.apache.hudi.gcp.bigquery.BigQuerySyncConfig.BIGQUERY_SYNC_PARTITION_FIELDS;
@@ -82,6 +84,16 @@ public class BigQuerySyncTool extends HoodieSyncTool {
     }
   }
 
+  public Boolean tableExists() {
+    try (HoodieBigQuerySyncClient bqSyncClient = new HoodieBigQuerySyncClient(config)) {
+      Boolean bool = bqSyncClient.tableExists(tableName);
+      bqSyncClient.close();
+      return bool;
+    } catch (Exception e) {
+      throw new HoodieBigQuerySyncException("Failed to sync BigQuery for table:" + tableName, e);
+    }
+  }
+
   private void syncCoWTableWithoutView(HoodieBigQuerySyncClient bqSyncClient) {
     ValidationUtils.checkState(bqSyncClient.getTableType() == HoodieTableType.COPY_ON_WRITE);
     LOG.info("Sync hoodie table " + snapshotViewName + " at base path " + bqSyncClient.getBasePath());
@@ -97,11 +109,14 @@ public class BigQuerySyncTool extends HoodieSyncTool {
             .setAssumeDatePartitioning(config.getBoolean(BIGQUERY_SYNC_ASSUME_DATE_PARTITIONING))
             .build();
 
+    Schema schema = convert(manifestFileWriter.getAvroSchema(), config.getSplitStrings(BIGQUERY_SYNC_PARTITION_FIELDS));
+
     bqSyncClient.createOrReplaceTable(
             tableName,
             manifestFileWriter.getBaseFiles(config.getString(BIGQUERY_SYNC_SOURCE_URI_PREFIX)),
             config.getString(BIGQUERY_SYNC_SOURCE_URI_PREFIX),
             config.getSplitStrings(BIGQUERY_SYNC_PARTITION_FIELDS),
+            schema,
             bqSyncClient.tableExists(tableName));
     LOG.info("External Table creation complete for " + tableName);
 

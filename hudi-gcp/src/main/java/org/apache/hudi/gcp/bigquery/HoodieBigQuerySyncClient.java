@@ -104,7 +104,7 @@ public class HoodieBigQuerySyncClient extends HoodieSyncClient {
     }
   }
 
-  public void createOrReplaceTable(String tableName, List<String> sourceUri, String sourceUriPrefix, List<String> partitionFields, boolean exists) {
+  public void createOrReplaceTable(String tableName, List<String> sourceUri, String sourceUriPrefix, List<String> partitionFields, Schema schema, boolean exists) {
     try {
       ExternalTableDefinition customTable;
       TableId tableId = TableId.of(projectId, datasetName, tableName);
@@ -115,7 +115,8 @@ public class HoodieBigQuerySyncClient extends HoodieSyncClient {
         customTable =
                 ExternalTableDefinition.newBuilder(sourceUriPrefix, parquetFormatOptions)
                         .setSourceUris(sourceUri)
-                        .setAutodetect(true)
+                        .setAutodetect(false)
+                        .setSchema(schema)
                         .setIgnoreUnknownValues(true)
                         .setMaxBadRecords(0)
                         .build();
@@ -124,13 +125,14 @@ public class HoodieBigQuerySyncClient extends HoodieSyncClient {
         HivePartitioningOptions hivePartitioningOptions =
                 HivePartitioningOptions.newBuilder()
                         .setMode("AUTO")
-                        .setRequirePartitionFilter(false)
+                        .setRequirePartitionFilter(true)
                         .setSourceUriPrefix(sourceUriPrefix)
                         .build();
         customTable =
                 ExternalTableDefinition.newBuilder(sourceUriPrefix, parquetFormatOptions)
                         .setSourceUris(sourceUri)
-                        .setAutodetect(true)
+                        .setAutodetect(false)
+                        .setSchema(schema)
                         .setHivePartitioningOptions(hivePartitioningOptions)
                         .setIgnoreUnknownValues(true)
                         .setMaxBadRecords(0)

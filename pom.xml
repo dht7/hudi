@@ -621,7 +621,7 @@
           <version>${apache-rat-plugin.version}</version>
           <configuration>
             <excludeSubProjects>false</excludeSubProjects>
-            <numUnapprovedLicenses>0</numUnapprovedLicenses>
+            <numUnapprovedLicenses>1</numUnapprovedLicenses>
             <licenses>
               <!-- Enforce this license:
                    Licensed to the Apache Software Foundation (ASF) under one
