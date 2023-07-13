@@ -13,8 +13,6 @@ import org.apache.avro.LogicalType;
 
 public class AvroToBQSchemaConverter {
 
-  private static final String CONNECT_NAME = "connect.name";
-
   private static StandardSQLTypeName convertType(org.apache.avro.Schema schema) {
     if (schema.getLogicalType() != null) {
       return convertLogicalType(schema.getLogicalType());
@@ -99,7 +97,11 @@ public class AvroToBQSchemaConverter {
         }
 
         if (!tempSchema.getType().equals(org.apache.avro.Schema.Type.NULL)) {
-          return convertField(name, tempSchema, Field.Mode.NULLABLE);
+          if (mode != Field.Mode.REPEATED) {
+            return convertField(name, tempSchema, Field.Mode.NULLABLE);
+          } else {
+            return convertField(name, tempSchema, Field.Mode.REPEATED);
+          }
         } else {
           throw new AvroTypeException("Both of the union fields cannot have type `null`");
         }
